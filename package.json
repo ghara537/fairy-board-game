@@ -1,6 +1,9 @@
 {
   "name": "fairy-board-game",
   "private": true,
+  "engines": {
+    "node": ">=18"
+  },
   "workspaces": [
     "packages/shared",
     "packages/server",

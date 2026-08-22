@@ -1,0 +1,21 @@
+{
+  "name": "fairy-board-game",
+  "private": true,
+  "workspaces": [
+    "packages/shared",
+    "packages/server",
+    "packages/client"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,green \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "npm run dev -w @fairy/server",
+    "dev:client": "npm run dev -w @fairy/client",
+    "build": "npm run build -w @fairy/shared && npm run build -w @fairy/server && npm run build -w @fairy/client",
+    "test": "npm run test -w @fairy/server",
+    "start": "npm run start -w @fairy/server"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "typescript": "^5.5.4"
+  }
+}

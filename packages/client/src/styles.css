@@ -1,0 +1,227 @@
+:root {
+  color-scheme: dark;
+  --bg: #0b100a;
+  --panel: #161f14;
+  --panel-2: #1e2b1a;
+  --border: #3a4a30;
+  --text: #eceadf;
+  --text-dim: #a8b89c;
+  --accent: #6fd3a8;
+  --accent-2: #e8b23d;
+  --danger: #e0645a;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: radial-gradient(ellipse at 50% 0%, #1a2415 0%, #0b100a 55%, #050705 100%);
+  background-attachment: fixed;
+  color: var(--text);
+}
+
+#root { min-height: 100vh; }
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  background: var(--accent);
+  color: #08130d;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-weight: 600;
+}
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+button.secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
+button.danger { background: var(--danger); color: #200807; }
+
+input, select {
+  font-family: inherit;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.app-shell { max-width: 1400px; margin: 0 auto; padding: 16px; }
+/* The live game board benefits from every pixel of a wide screen — let it
+   fill the viewport instead of sitting centered in a 1400px column. */
+.app-shell-wide { max-width: none; padding: 16px 24px; }
+
+.card-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+/* Board panel — no corner ornaments (removed so the board itself has more
+   room to render large); keeps a subtle warm border as its only theming. */
+.board-frame {
+  position: relative;
+  border-color: #4a3a1e;
+  padding: 8px;
+}
+
+.stack { display: flex; flex-direction: column; gap: 12px; }
+.row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.spread { display: flex; justify-content: space-between; align-items: center; }
+
+h1, h2, h3 { margin: 0 0 8px 0; }
+.text-dim { color: var(--text-dim); }
+.small { font-size: 0.85em; }
+
+.home-hero { text-align: center; padding: 60px 20px; }
+.home-actions { display: flex; gap: 16px; justify-content: center; margin-top: 24px; flex-wrap: wrap; }
+
+.room-code {
+  font-size: 2em;
+  letter-spacing: 0.2em;
+  font-weight: 700;
+  color: var(--accent-2);
+}
+
+.player-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.player-row {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--panel-2); border-radius: 8px; padding: 8px 10px;
+}
+.status-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.status-connected { background: #4ecb71; }
+.status-disconnected { background: #888; }
+.status-reconnecting { background: var(--accent-2); }
+
+.domain-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.domain-card {
+  border: 2px solid var(--border); border-radius: 10px; padding: 12px;
+  background: var(--panel-2); cursor: pointer;
+}
+.domain-card.taken { opacity: 0.35; cursor: not-allowed; filter: grayscale(0.6); }
+.domain-card.mine { border-color: var(--accent); }
+.domain-card h4 { margin: 0 0 4px 0; }
+
+.game-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr 280px;
+  gap: 12px;
+  align-items: start;
+}
+@media (max-width: 1000px) {
+  .game-layout { grid-template-columns: 1fr; }
+}
+
+.hex-board { width: 100%; height: auto; max-height: 92vh; touch-action: manipulation; user-select: none; }
+.hex-tile { fill: #24384a; stroke: #0b1710; stroke-width: 1.5; cursor: default; transition: fill 0.15s; }
+/* Clicking/tapping a focusable SVG polygon draws the browser's default focus
+   ring around its bounding box — a jarring square around a hex shape.
+   Selecting a hex should read purely as `.hex-legal`'s color change. */
+.hex-tile:focus { outline: none; }
+
+.hex-tile.hex-terrain-0 { fill: url(#terrain-0); }
+.hex-tile.hex-terrain-1 { fill: url(#terrain-1); }
+.hex-tile.hex-terrain-2 { fill: url(#terrain-2); }
+.hex-tile.hex-terrain-3 { fill: url(#terrain-3); }
+.hex-tile.hex-terrain-4 { fill: url(#terrain-4); }
+.hex-tile.hex-terrain-5 { fill: url(#terrain-5); }
+
+.hex-tile.hex-legal { fill: #2c5a45; stroke: var(--accent); cursor: pointer; }
+.hex-tile.hex-legal:hover { fill: #34785a; }
+.hex-tile.hex-portal { fill: #6b1018; stroke: #e8b23d; stroke-width: 2; }
+.hex-tile.hex-portal-ring { stroke: #e8b23d; stroke-width: 2; }
+.hex-tile.hex-portal-ring-a { fill: #8a6f45; }
+.hex-tile.hex-portal-ring-b { fill: #6c7178; }
+.hex-tile.hex-portal-ring.hex-legal { stroke: var(--accent); }
+
+.portal-ring-label { font-size: 14px; font-weight: 700; fill: #241a0d; pointer-events: none; }
+.toadstool-ring-icon { font-size: 13px; opacity: 0.85; }
+
+/* Domain boards: each player's 4-hex scoring territory, attached past one
+   edge of the main board (see HexBoard.tsx's domainLayouts). */
+.hex-tile.hex-domain { fill: url(#domain-hex-gradient); stroke-width: 2; }
+.hex-tile.hex-domain.hex-legal { fill: #d8bf6a; }
+.domain-owner-label { font-size: 14px; font-weight: 700; letter-spacing: 0.02em; }
+.domain-mat-image { cursor: pointer; transition: opacity 0.15s; }
+.domain-mat-image:hover { opacity: 0.88; }
+.ability-used-mark { stroke: var(--danger); stroke-width: 5; stroke-linecap: round; }
+
+.piece-icon { font-size: 22px; pointer-events: all; }
+.obstacle-icon { font-size: 25px; }
+.accel-icon { font-size: 17px; }
+.portal-icon { font-size: 27px; opacity: 0.85; }
+.human-icon { cursor: pointer; }
+.human-moved { opacity: 0.4; }
+.human-confused { filter: drop-shadow(0 0 3px var(--danger)); }
+.piece-selected { filter: drop-shadow(0 0 4px var(--accent-2)); }
+.lure-height { font-size: 13px; fill: #fff; font-weight: 700; pointer-events: none; }
+
+.prompt-banner {
+  background: linear-gradient(90deg, #2c5a45, #1f2e3d);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-weight: 600;
+}
+
+.log-panel { max-height: 300px; overflow-y: auto; font-size: 0.85em; display: flex; flex-direction: column-reverse; gap: 4px; }
+.log-entry { border-bottom: 1px solid var(--border); padding: 3px 0; color: var(--text-dim); }
+
+.hand-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.hand-card {
+  border: 1px solid var(--border); border-radius: 8px; padding: 8px; width: 120px;
+  background: var(--panel-2); cursor: pointer; font-size: 0.8em;
+}
+.hand-card:hover { border-color: var(--accent); }
+.hand-card.selected { border-color: var(--accent-2); background: #2c2418; }
+
+.ability-list { display: flex; flex-direction: column; gap: 8px; }
+.ability-detail {
+  border: 1px solid var(--border); border-radius: 8px; padding: 8px;
+  background: var(--panel-2); font-size: 0.8em;
+}
+.ability-detail.used { opacity: 0.5; }
+.ability-detail .spread { gap: 8px; }
+.ability-detail button { flex-shrink: 0; padding: 4px 10px; font-size: 0.9em; }
+.ability-unused-marker {
+  width: 14px; height: 14px; flex-shrink: 0;
+  border: 2px solid var(--accent-2); border-radius: 3px;
+}
+
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(5, 8, 4, 0.82);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px; z-index: 200;
+}
+.modal-content { position: relative; max-width: 95vw; max-height: 95vh; }
+.modal-mat-frame { position: relative; display: inline-block; max-width: 95vw; max-height: 95vh; line-height: 0; }
+.modal-mat-image {
+  display: block; max-width: 95vw; max-height: 95vh; width: auto; height: auto;
+  border-radius: 14px; box-shadow: 0 12px 48px rgba(0, 0, 0, 0.65);
+}
+.modal-mat-used-mark {
+  position: absolute; transform: translate(-50%, -50%); pointer-events: none;
+  stroke: var(--danger); stroke-width: 9; stroke-linecap: round;
+}
+.modal-close {
+  position: absolute; top: -16px; right: -16px; width: 34px; height: 34px;
+  border-radius: 50%; padding: 0; font-size: 16px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.toast-stack { position: fixed; bottom: 16px; right: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 50; }
+.toast { background: var(--panel); border: 1px solid var(--danger); border-radius: 8px; padding: 10px 14px; max-width: 320px; }
+
+.response-stack-item { border-left: 3px solid var(--accent-2); padding: 6px 8px; margin-bottom: 6px; background: var(--panel-2); border-radius: 4px; font-size: 0.85em; }
+.response-stack-item.canceled { border-left-color: var(--danger); text-decoration: line-through; opacity: 0.6; }
+
+.turn-order-strip { display: flex; gap: 6px; flex-wrap: wrap; }
+.turn-order-chip { padding: 4px 8px; border-radius: 12px; background: var(--panel-2); font-size: 0.8em; border: 1px solid var(--border); }
+.turn-order-chip.active { background: var(--accent); color: #08130d; font-weight: 700; }
+.turn-order-chip.first { border-color: var(--accent-2); }
+
+.score-table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+.score-table td, .score-table th { padding: 4px 6px; border-bottom: 1px solid var(--border); text-align: left; }
+
+.link-like { background: none; color: var(--accent); text-decoration: underline; padding: 0; }

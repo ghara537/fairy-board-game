@@ -1,0 +1,21 @@
+# Render Blueprint — deploys this whole monorepo as one full-stack web
+# service (the server serves the client's built static assets itself; see
+# packages/server/src/index.ts). No database/persistent disk: all game
+# state is in-memory by design (spec: games don't survive a restart).
+#
+# Deploy: in the Render dashboard, New -> Blueprint -> pick this repo. Or
+# deploy without a Blueprint at all by creating a Web Service manually and
+# entering the same build/start commands below.
+services:
+  - type: web
+    name: fairy-domains
+    runtime: node
+    plan: free # spins down after ~15 min idle on the free tier — bump to "starter" for an always-on host during a live game session
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: CLIENT_ORIGIN
+        sync: false # optional — the server already falls back to Render's own auto-provided RENDER_EXTERNAL_URL if this is left unset

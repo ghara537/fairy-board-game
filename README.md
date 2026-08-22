@@ -209,10 +209,17 @@ a plain VM, etc.):
 1. `npm install && npm run build`
 2. Start command: `npm start` (equivalently `npm run start -w @fairy/server`)
 3. Set `PORT` (most hosts inject this automatically) and `CLIENT_ORIGIN` to
-   your public URL.
+   your public URL. On Render specifically, `CLIENT_ORIGIN` can be left
+   unset — the server falls back to Render's own auto-provided
+   `RENDER_EXTERNAL_URL` — see `render.yaml` at the repo root, a ready-made
+   Blueprint for a one-service deploy there (New -> Blueprint in the Render
+   dashboard). No render.yaml equivalent is needed for the other hosts
+   above; just set the two env vars directly.
 4. Persistent disk is **not** required — all game state is in-memory by
    design (spec: no database, games don't survive a restart). Just make sure
-   your host doesn't idle/sleep mid-game if you want long play sessions.
+   your host doesn't idle/sleep mid-game if you want long play sessions
+   (`render.yaml` defaults to Render's free tier, which does sleep after
+   ~15 min idle — bump the `plan` to `starter` there for an always-on host).
 
 ## Editing game content
 

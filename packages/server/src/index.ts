@@ -11,7 +11,11 @@ import { registerSocketHandlers } from "./socket/handlers";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const PORT = Number(process.env.PORT ?? 4000);
-const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN ?? "http://localhost:5173";
+// Render (and some other hosts) auto-populate an env var with the service's
+// own public URL — falling back to it means a single-service deploy there
+// works with zero manual config, since the client is served same-origin by
+// this exact server anyway. CLIENT_ORIGIN still wins if set explicitly.
+const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN ?? process.env.RENDER_EXTERNAL_URL ?? "http://localhost:5173";
 const CLIENT_DIST_PATH = process.env.CLIENT_DIST_PATH ?? path.join(__dirname, "../../client/dist");
 
 const app = express();

@@ -11,6 +11,31 @@ import { Room } from "../rooms/Room";
 import { availableActions } from "../game/engine/turns";
 
 /**
+ * Swaps every player id in a log line for that player's display name.
+ *
+ * Engine log text is written with template literals over ids (`${playerId}
+ * used …`) in around a hundred places, which reach the UI as
+ * "player-ABC123-0-1789668407059-119458 used Siren's Call". Substituting
+ * here rather than at each call site means every message — and every future
+ * one — reads as names, while the stored entry keeps the raw ids (and its
+ * structured `data` payload) for anything that matches on them. Display
+ * names only exist on the Room's player records, not in ServerGameState, so
+ * the view builder is the first place both are in hand.
+ *
+ * Longest id first, so an id that happens to be a prefix of another is never
+ * substituted inside it.
+ */
+function withPlayerNames(room: Room, text: string): string {
+  let out = text;
+  const byLength = [...room.players.values()].sort((a, b) => b.id.length - a.id.length);
+  for (const p of byLength) {
+    if (!p.id || !p.name || !out.includes(p.id)) continue;
+    out = out.split(p.id).join(p.name);
+  }
+  return out;
+}
+
+/**
  * Builds the view for exactly one player. This is the ONLY place hidden
  * information (hands, response-window instant options, etc.) is decided —
  * everything else in the server operates on the full ServerGameState, and
@@ -47,7 +72,9 @@ export function buildPersonalizedView(room: Room, viewerPlayerId: PlayerId | nul
         })
       : null;
 
-  const combinedLog = [...room.log, ...(game?.log ?? [])].sort((a, b) => a.timestamp - b.timestamp);
+  const combinedLog = [...room.log, ...(game?.log ?? [])]
+    .sort((a, b) => a.timestamp - b.timestamp)
+    .map((entry) => ({ ...entry, text: withPlayerNames(room, entry.text) }));
 
   let pendingInteractionView: PersonalizedGameView["pendingInteraction"] = null;
   if (game?.pendingInteraction) {

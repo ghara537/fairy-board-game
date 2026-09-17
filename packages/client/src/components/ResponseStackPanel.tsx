@@ -1,12 +1,15 @@
 import React from "react";
-import type { PublicEffectStackItem } from "@fairy/shared";
+import type { PlayerId, PublicEffectStackItem } from "@fairy/shared";
 
 export function ResponseStackPanel({
   items,
+  playerNames,
   selectable,
   onSelect,
 }: {
   items: PublicEffectStackItem[];
+  /** Display names by player id — without it the panel can only show the raw id. */
+  playerNames?: Record<PlayerId, string>;
   selectable?: boolean;
   onSelect?: (id: string) => void;
 }) {
@@ -21,7 +24,9 @@ export function ResponseStackPanel({
           style={selectable && item.status === "pending" ? { cursor: "pointer", outline: "1px dashed #f2c14e" } : undefined}
         >
           <strong>{item.name}</strong> <span className="text-dim">({item.kind === "card" ? "Enchantment" : "Domain ability"})</span>
-          <div className="small text-dim">by {item.sourcePlayerId} · {item.status}</div>
+          <div className="small text-dim">
+            by {playerNames?.[item.sourcePlayerId] ?? item.sourcePlayerId} · {item.status}
+          </div>
         </div>
       ))}
     </div>

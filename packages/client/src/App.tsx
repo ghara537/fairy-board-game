@@ -1,6 +1,5 @@
 import React, { useEffect } from "react";
 import { useAppStore } from "./state/store";
-import { buildRejoinUrl } from "./state/session";
 import { Home } from "./screens/Home";
 import { CreateRoom } from "./screens/CreateRoom";
 import { JoinRoom } from "./screens/JoinRoom";
@@ -9,6 +8,8 @@ import { Options } from "./screens/Options";
 import { Lobby } from "./screens/Lobby";
 import { GameScreen } from "./screens/GameScreen";
 import { EndGame } from "./screens/EndGame";
+import { CopyRejoinLinkButton } from "./components/CopyRejoinLinkButton";
+import { useCompactLayout } from "./mobile/useCompactLayout";
 
 export default function App() {
   const screen = useAppStore((s) => s.screen);
@@ -17,36 +18,30 @@ export default function App() {
   const toasts = useAppStore((s) => s.toasts);
   const dismissToast = useAppStore((s) => s.dismissToast);
   const tryAutoReconnect = useAppStore((s) => s.tryAutoReconnect);
-  const pushToast = useAppStore((s) => s.pushToast);
+  const compact = useCompactLayout();
 
   useEffect(() => {
     tryAutoReconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function copyRejoinLink() {
-    if (!seat) return;
-    const url = buildRejoinUrl(seat);
-    navigator.clipboard?.writeText(url).then(
-      () => pushToast("Rejoin link copied — save it somewhere private. Anyone with it can control your seat."),
-      () => pushToast(url)
-    );
-  }
+  // The compact game screen is a fixed, full-viewport layout that supplies its
+  // own chrome — the shell's padding and header row would only sit uselessly
+  // underneath it. Its rejoin link moves into the dock's More sheet.
+  const compactGame = compact && screen === "game";
 
   return (
-    <div className={`app-shell${screen === "game" ? " app-shell-wide" : ""}`}>
+    <div className={`app-shell${screen === "game" ? " app-shell-wide" : ""}${compactGame ? " app-shell-bare" : ""}`}>
       {!socketConnected && (
-        <div className="prompt-banner" style={{ marginBottom: 12 }}>
+        <div className={`prompt-banner${compactGame ? " connection-banner" : ""}`} style={compactGame ? undefined : { marginBottom: 12 }}>
           Connecting to server… If this persists, your connection was lost — we'll rejoin your seat automatically once
           it's back.
         </div>
       )}
 
-      {seat && (
+      {seat && !compactGame && (
         <div className="row" style={{ justifyContent: "flex-end", marginBottom: 8 }}>
-          <button className="secondary small" onClick={copyRejoinLink} title="A private link that reclaims this exact seat, even from another device.">
-            🔗 Copy my rejoin link
-          </button>
+          <CopyRejoinLinkButton />
         </div>
       )}
 

@@ -14,6 +14,8 @@ import {
 } from "@fairy/shared";
 import { axialToPixel, hexCornerPoints, rotatePoint } from "./geometry";
 import { MAT_CHECKBOX_CENTERS, MAT_NATIVE_SIZE } from "./matCheckboxes";
+import { ACCEL_MARKER_ICON, HUMAN_ICONS, OBSTACLE_ICONS, PORTAL_ICON } from "./icons";
+import { DOMAIN_ABBR } from "../abbreviations";
 
 const DOMAIN_MAT_URLS: Record<string, string> = {
   "ocean-sirens": "/board-art/mat-ocean-sirens.webp",
@@ -29,21 +31,10 @@ const DOMAIN_MAT_URLS: Record<string, string> = {
 // so `preserveAspectRatio="xMidYMid meet"` letterboxes rather than stretch.
 const MAT_WIDTH = 32 * 8;
 const MAT_HEIGHT = MAT_WIDTH / 2;
-
-const HUMAN_ICONS: Record<string, string> = {
-  adult: "🧑",
-  child: "🧒",
-  baby: "👶",
-  lover: "💞",
-  mother: "🤱",
-  hunter: "🏹",
-};
-
-const OBSTACLE_ICONS: Record<string, string> = {
-  tree: "🌲",
-  stone: "🪨",
-  toadstool: "🍄",
-};
+// Compact stand-in for the mat art (see `compactMats`) — a fraction of the
+// footprint, so the hexes themselves get the pixels instead.
+const BANNER_WIDTH = 32 * 2.6;
+const BANNER_HEIGHT = 30;
 
 const HEX_SIZE = 32;
 
@@ -59,6 +50,13 @@ const TERRAIN_GRADIENTS: { id: string; from: string; to: string }[] = [
   { id: "terrain-4", from: "#6b7078", to: "#2c2f34" }, // stone gray
   { id: "terrain-5", from: "#63722f", to: "#262e10" }, // olive
 ];
+
+/** Radius of the invisible tap disc under a piece's glyph, in board units.
+ * A lone piece gets most of its hex; pieces sharing a hex (they render side
+ * by side, 17 units apart) get half that spacing so each stays selectable. */
+function hitRadius(piecesInHex: number): number {
+  return piecesInHex > 1 ? 8 : HEX_SIZE * 0.52;
+}
 
 function hashAxialKey(key: string): number {
   let h = 0;
@@ -109,6 +107,12 @@ export type HexBoardProps = {
   onAccelMarkerClick?: (markerId: string, position: Axial) => void;
   // Clicking a Domain's on-board banner opens its full player mat (art + abilities) at readable size.
   onDomainMatClick?: (domainId: DomainId) => void;
+  // Compact layout (phone-sized screens): the full mat art is unreadable at
+  // that size and its ~2:1 box more than doubles the board's bounding area,
+  // shrinking every hex. Instead each Domain gets a small owner banner —
+  // colored chip, Domain abbreviation, and one dot per still-unused ability
+  // — which taps through to the same full-mat lightbox.
+  compactMats?: boolean;
 };
 
 export function HexBoard(props: HexBoardProps) {
@@ -133,6 +137,7 @@ export function HexBoard(props: HexBoardProps) {
     onObstacleClick,
     onAccelMarkerClick,
     onDomainMatClick,
+    compactMats,
   } = props;
 
   const cells = useMemo(() => generateHexagonalBoard(edgeLength), [edgeLength]);
@@ -208,26 +213,34 @@ export function HexBoard(props: HexBoardProps) {
       // Clear the Domain's own hexes (and the mat's own footprint) by the
       // mat's half-diagonal, since it's placed upright rather than rotated
       // to align with the outward ray — a safe clearance at any angle.
-      const clearance = HEX_SIZE * 1.5 + Math.hypot(MAT_WIDTH, MAT_HEIGHT) / 2 + 10;
+      const boxW = compactMats ? BANNER_WIDTH : MAT_WIDTH;
+      const boxH = compactMats ? BANNER_HEIGHT : MAT_HEIGHT;
+      // The full mat needs its half-diagonal of clearance because it's a big
+      // upright box at an arbitrary angle to the ray. The compact banner is
+      // small enough that its half-height is clearance enough, and every
+      // pixel it doesn't claim goes back into the board's own hexes.
+      const clearance = compactMats
+        ? HEX_SIZE + boxH / 2 + 8
+        : HEX_SIZE * 1.5 + Math.hypot(boxW, boxH) / 2 + 10;
       const matCx = rotatedMid.x + outUnit.x * clearance;
       const matCy = rotatedMid.y + outUnit.y * clearance;
-      const labelOffset = MAT_HEIGHT / 2 + 16;
+      const labelOffset = boxH / 2 + (compactMats ? 11 : 16);
       const labelCx = matCx + outUnit.x * labelOffset;
       const labelCy = matCy + outUnit.y * labelOffset;
       return { assignment: d, hexPixels, matCx, matCy, labelCx, labelCy };
     });
-  }, [domainBoards, rotationDeg, portalPxCanonical]);
+  }, [domainBoards, rotationDeg, portalPxCanonical, compactMats]);
 
   const domainBoundsPoints = useMemo(
     () =>
       domainLayouts.flatMap((d) => {
-        const half = Math.max(MAT_WIDTH, MAT_HEIGHT) / 2 + HEX_SIZE;
+        const half = (compactMats ? Math.max(BANNER_WIDTH, BANNER_HEIGHT) : Math.max(MAT_WIDTH, MAT_HEIGHT)) / 2 + HEX_SIZE;
         return [
           { x: d.matCx - half, y: d.matCy - half },
           { x: d.matCx + half, y: d.matCy + half },
         ];
       }),
-    [domainLayouts]
+    [domainLayouts, compactMats]
   );
 
   const allBoundPoints = [...pixels.map((p) => p.px), ...domainBoundsPoints];
@@ -334,6 +347,42 @@ export function HexBoard(props: HexBoardProps) {
                 />
               );
             })}
+            {/* Compact layout: a tappable owner banner in place of the mat art. */}
+            {compactMats ? (
+              <g
+                className="domain-banner"
+                onClick={() => onDomainMatClick?.(d.assignment.domainId)}
+                style={{ cursor: onDomainMatClick ? "pointer" : undefined }}
+                role={onDomainMatClick ? "button" : undefined}
+                aria-label={`View the ${d.assignment.domainId} player mat`}
+              >
+                <title>Tap to view the full {d.assignment.domainId} player mat</title>
+                <rect
+                  x={d.matCx - BANNER_WIDTH / 2}
+                  y={d.matCy - BANNER_HEIGHT / 2}
+                  width={BANNER_WIDTH}
+                  height={BANNER_HEIGHT}
+                  rx={7}
+                  className="domain-banner-box"
+                  style={{ stroke: color }}
+                />
+                <text x={d.matCx} y={d.matCy + 1} textAnchor="middle" className="domain-banner-label" style={{ fill: color }} pointerEvents="none">
+                  {DOMAIN_ABBR[d.assignment.domainId] ?? d.assignment.domainId}
+                </text>
+                {/* One dot per still-unused ability — the banner's stand-in for the mat's checkboxes. */}
+                {(domainAbilitiesUsed?.[d.assignment.playerId] ?? []).map((used, i) => (
+                  <circle
+                    key={`dot-${i}`}
+                    cx={d.matCx + (i - 1) * 8}
+                    cy={d.matCy + 9}
+                    r={2.6}
+                    className={`domain-banner-dot${used ? " used" : ""}`}
+                    pointerEvents="none"
+                  />
+                ))}
+              </g>
+            ) : (
+            <>
             {/* Full player mat (art + every ability's rules text) — always upright, positioned clear of the Domain's own hexes so they stay fully visible. */}
             <image
               href={DOMAIN_MAT_URLS[d.assignment.domainId]}
@@ -362,12 +411,14 @@ export function HexBoard(props: HexBoardProps) {
                 </g>
               );
             })}
+            </>
+            )}
             {label && (
               <text
                 x={d.labelCx}
                 y={d.labelCy}
                 textAnchor="middle"
-                className="domain-owner-label"
+                className={`domain-owner-label${compactMats ? " compact" : ""}`}
                 style={{ fill: color }}
                 pointerEvents="none"
               >
@@ -378,8 +429,10 @@ export function HexBoard(props: HexBoardProps) {
         );
       })}
 
-      {/* Toadstool ring decorating the Portal cluster's outer edge, matching the reference board art */}
-      {(() => {
+      {/* Toadstool ring decorating the Portal cluster's outer edge, matching
+          the reference board art. Dropped in the compact layout — at phone
+          scale it crowds the Portal cluster instead of decorating it. */}
+      {!compactMats && (() => {
         const center = portalPxCanonical;
         const radius = HEX_SIZE * (Math.sqrt(3) + 0.85);
         const count = 12;
@@ -400,7 +453,7 @@ export function HexBoard(props: HexBoardProps) {
         const px = portalPxCanonical;
         return (
           <text x={px.x} y={px.y + 9} textAnchor="middle" className="piece-icon portal-icon" pointerEvents="none">
-            🌀
+            {PORTAL_ICON}
           </text>
         );
       })()}
@@ -409,16 +462,12 @@ export function HexBoard(props: HexBoardProps) {
       {obstacles.map((o) => {
         const px = toScreen(o.position);
         return (
-          <text
-            key={o.id}
-            x={px.x}
-            y={px.y + 8}
-            textAnchor="middle"
-            className="piece-icon obstacle-icon"
-            onClick={() => onObstacleClick?.(o.id, o.position)}
-          >
-            {OBSTACLE_ICONS[o.type] ?? "?"}
-          </text>
+          <g key={o.id} onClick={() => onObstacleClick?.(o.id, o.position)}>
+            <circle cx={px.x} cy={px.y} r={hitRadius(1)} className="piece-hit" />
+            <text x={px.x} y={px.y + 8} textAnchor="middle" className="piece-icon obstacle-icon" pointerEvents="none">
+              {OBSTACLE_ICONS[o.type] ?? "?"}
+            </text>
+          </g>
         );
       })}
 
@@ -426,16 +475,12 @@ export function HexBoard(props: HexBoardProps) {
       {accelMarkers.map((m) => {
         const px = toScreen(m.position);
         return (
-          <text
-            key={m.id}
-            x={px.x}
-            y={px.y + 6}
-            textAnchor="middle"
-            className="piece-icon accel-icon"
-            onClick={() => onAccelMarkerClick?.(m.id, m.position)}
-          >
-            ⚡
-          </text>
+          <g key={m.id} onClick={() => onAccelMarkerClick?.(m.id, m.position)}>
+            <circle cx={px.x} cy={px.y} r={hitRadius(1)} className="piece-hit" />
+            <text x={px.x} y={px.y + 6} textAnchor="middle" className="piece-icon accel-icon" pointerEvents="none">
+              {ACCEL_MARKER_ICON}
+            </text>
+          </g>
         );
       })}
 
@@ -454,7 +499,7 @@ export function HexBoard(props: HexBoardProps) {
       })}
 
       {/* Humans (offset if multiple share a hex) */}
-      {humans.map((h, i) => {
+      {humans.map((h) => {
         const sameHex = humansByKey.get(axialKey(h.position)) ?? [h];
         const idxInHex = sameHex.findIndex((x) => x.instanceId === h.instanceId);
         const px = toScreen(h.position);
@@ -469,16 +514,12 @@ export function HexBoard(props: HexBoardProps) {
           .filter(Boolean)
           .join(" ");
         return (
-          <text
-            key={h.instanceId}
-            x={px.x + offsetX}
-            y={px.y + 13}
-            textAnchor="middle"
-            className={classes}
-            onClick={() => onHumanClick?.(h.instanceId, h.position)}
-          >
-            {HUMAN_ICONS[h.definitionId] ?? "❓"}
-          </text>
+          <g key={h.instanceId} onClick={() => onHumanClick?.(h.instanceId, h.position)} className="human-icon">
+            <circle cx={px.x + offsetX} cy={px.y + 6} r={hitRadius(sameHex.length)} className="piece-hit" />
+            <text x={px.x + offsetX} y={px.y + 13} textAnchor="middle" className={classes} pointerEvents="none">
+              {HUMAN_ICONS[h.definitionId] ?? "❓"}
+            </text>
+          </g>
         );
       })}
     </svg>

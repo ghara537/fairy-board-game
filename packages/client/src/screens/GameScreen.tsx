@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import type { Axial, DomainId } from "@fairy/shared";
+import type { Axial, DomainId, PersonalizedGameView } from "@fairy/shared";
 import { ENCHANTMENT_DEFINITIONS_BY_ID, DOMAIN_DEFINITIONS_BY_ID, HUMAN_DEFINITIONS } from "@fairy/shared";
 import { useAppStore } from "../state/store";
 import { socket, newActionId } from "../socket";
@@ -15,16 +15,15 @@ import { DomainMatModal } from "../components/DomainMatModal";
 import { computePlayerColors } from "../playerColors";
 import { legalBoardSpacesForStep, legalLurePlacementSpaces, upcomingSpawnSpaces } from "../legality";
 import { CARD_TARGETING, ABILITY_TARGETING, TargetStep } from "../targetingScripts";
-import { shortName } from "../abbreviations";
+import { DOMAIN_ABBR, shortName } from "../abbreviations";
 import { HUMAN_ICONS } from "../board/icons";
 import { CopyRejoinLinkButton } from "../components/CopyRejoinLinkButton";
-import { useCompactLayout, useNarrowDock, useNarrowPortrait } from "../mobile/useCompactLayout";
+import { useCompactLayout, useNarrowPortrait } from "../mobile/useCompactLayout";
 import { CompactTopBar } from "../mobile/CompactTopBar";
-import { CompactDock, SheetKey } from "../mobile/CompactDock";
+import { CompactRail, RailTab, TabKey } from "../mobile/CompactRail";
 import { CompactHandPanel } from "../mobile/CompactHandPanel";
 import { CompactAbilityPanel } from "../mobile/CompactAbilityPanel";
 import { BoardLegend } from "../mobile/BoardLegend";
-import { Sheet } from "../mobile/Sheet";
 import { InfoPopup } from "../mobile/InfoPopup";
 
 type Targeting = {
@@ -43,47 +42,48 @@ function resolveToadstoolSteps(baseKey: string, toadstoolCount: number): TargetS
   return CARD_TARGETING[baseKey] ?? ABILITY_TARGETING[baseKey] ?? [];
 }
 
+/** A view that has finished setup — everything past the loading state can
+ * treat `board` as present. */
+type LiveView = PersonalizedGameView & { board: NonNullable<PersonalizedGameView["board"]> };
+function hasBoard(v: PersonalizedGameView): v is LiveView {
+  return v.board !== null;
+}
+
 export function GameScreen() {
   const view = useAppStore((s) => s.view);
+  if (!view || !hasBoard(view)) return <div className="card-panel">Loading game…</div>;
+  // Everything below needs a live view. Splitting it out means the rest of
+  // the screen derives its state unconditionally, so effects can depend on
+  // fully-built values (which panel the game is waiting on, say) instead of
+  // re-deriving a rough copy of them above the guard.
+  return <LiveGameScreen view={view} />;
+}
+
+function LiveGameScreen({ view }: { view: LiveView }) {
   const [targeting, setTargeting] = useState<Targeting | null>(null);
   const [placingLure, setPlacingLure] = useState(false);
   const [confirmingDiscardDraw, setConfirmingDiscardDraw] = useState(false);
   const [mandatoryDiscardSelection, setMandatoryDiscardSelection] = useState<string[]>([]);
   const [viewingMatDomainId, setViewingMatDomainId] = useState<DomainId | null>(null);
-  // Compact layout only: which dock sheet is open, and whether the truncated
-  // one-line prompt has been tapped open to its full text.
-  const [openSheet, setOpenSheet] = useState<SheetKey | null>(null);
+  // Compact layout only: which rail tab is showing, and whether the clamped
+  // prompt has been tapped open to its full text.
+  const [activeTab, setActiveTab] = useState<TabKey>("hand");
   const [promptExpanded, setPromptExpanded] = useState(false);
   // A full board fitted to a phone's short side renders every hex at about
   // 20px — legible, but not comfortably tappable. Rather than gesture
-  // handling, the dock cycles a plain scale factor and the board area
+  // handling, the rail cycles a plain scale factor and the board area
   // scrolls; tap targets grow with it.
   const [boardZoom, setBoardZoom] = useState(1);
   const boardScrollRef = React.useRef<HTMLDivElement | null>(null);
   const compact = useCompactLayout();
   const narrowPortrait = useNarrowPortrait();
-  const narrowDock = useNarrowDock();
 
   const colors = useMemo(() => computePlayerColors(view), [view]);
   const domainAbilitiesUsed = useMemo(
-    () => Object.fromEntries((view?.players ?? []).map((p) => [p.id, p.abilitiesUsed])),
+    () => Object.fromEntries(view.players.map((p) => [p.id, p.abilitiesUsed])),
     [view]
   );
 
-  // Compact layout: a response window is answered from your hand, so open
-  // that sheet for the player instead of making them hunt for it under a
-  // timer. Conversely, anything that needs board taps closes every sheet —
-  // the board is the thing they need to see.
-  const instantResponsePending =
-    view?.pendingInteraction?.kind === "chooseInstantResponse" &&
-    view.pendingInteraction.forPlayerIds.includes(view.yourPlayerId ?? "");
-  const boardTargetingActive = Boolean(targeting) || placingLure;
-  useEffect(() => {
-    if (compact && instantResponsePending) setOpenSheet("hand");
-  }, [compact, instantResponsePending]);
-  useEffect(() => {
-    if (compact && boardTargetingActive) setOpenSheet(null);
-  }, [compact, boardTargetingActive]);
   // Zooming in should keep you looking at the middle of the board — the
   // Portal and the action — not at whatever corner the scroll box starts in.
   useEffect(() => {
@@ -92,8 +92,6 @@ export function GameScreen() {
     el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2;
     el.scrollTop = (el.scrollHeight - el.clientHeight) / 2;
   }, [boardZoom]);
-
-  if (!view || !view.board) return <div className="card-panel">Loading game…</div>;
 
   const me = view.players.find((p) => p.id === view.yourPlayerId);
   const myTurn = view.activePlayerId === view.yourPlayerId && view.phase === "player-turn";
@@ -335,7 +333,7 @@ export function GameScreen() {
                 ones this response window allows. */}
             {compact
               ? ((myInteraction.legalOptions as any)?.instantAbilityIndices ?? []).length > 0 && (
-                  <div className="small text-dim">Or answer with an Instant ability — open ✨ Powers.</div>
+                  <div className="small text-dim">Or answer with an Instant ability — see the ✨ tab.</div>
                 )
               : domain &&
                 ((myInteraction.legalOptions as any)?.instantAbilityIndices ?? []).map((index: number) => {
@@ -389,13 +387,11 @@ export function GameScreen() {
           const key = DOMAIN_DEFINITIONS_BY_ID[me.domainId].abilities[index].key;
           if (myInteraction?.kind === "chooseInstantResponse") beginInstantAbilityResponseTargeting(index, key);
           else beginAbilityTargeting(index, key);
-          setOpenSheet(null);
         }}
         mainAbilityBlocked={mainAbilityBlocked}
         onUseMainAbility={() => {
           if (!mainAbility) return;
           beginMainAbilityTargeting(mainAbility.key);
-          setOpenSheet(null);
         }}
       />
     ) : (
@@ -428,10 +424,7 @@ export function GameScreen() {
               className="secondary"
               style={{ marginTop: 8, width: "100%" }}
               disabled={mainAbilityBlocked}
-              onClick={() => {
-                beginMainAbilityTargeting(mainAbility.key);
-                setOpenSheet(null);
-              }}
+              onClick={() => beginMainAbilityTargeting(mainAbility.key)}
             >
               Use Main Ability
             </button>
@@ -450,7 +443,6 @@ export function GameScreen() {
         selectable={currentStep?.picks === "responseStackItem"}
         onSelect={(id) => {
           onResponseStackSelect(id);
-          setOpenSheet(null);
         }}
       />
     ),
@@ -470,7 +462,6 @@ export function GameScreen() {
                 title={placeLureAction?.reason}
                 onClick={() => {
                   setPlacingLure(true);
-                  setOpenSheet(null);
                 }}
               >
                 Place a Lure
@@ -479,7 +470,7 @@ export function GameScreen() {
               <div className="small text-dim">
                 {playCardAction?.available
                   ? compact
-                    ? "Open Hand to play a card."
+                    ? "Play a card from the 🃏 tab."
                     : "Pick a card below to play it."
                   : playCardAction?.reason}
               </div>
@@ -488,7 +479,6 @@ export function GameScreen() {
                 title={drawCardAction?.reason}
                 onClick={() => {
                   submitAction("drawCard", {});
-                  setOpenSheet(null);
                 }}
               >
                 Draw a Card
@@ -505,7 +495,6 @@ export function GameScreen() {
                       onClick={() => {
                         submitAction("discardDraw", {});
                         setConfirmingDiscardDraw(false);
-                        setOpenSheet(null);
                       }}
                     >
                       Confirm
@@ -529,7 +518,6 @@ export function GameScreen() {
                 className="secondary"
                 onClick={() => {
                   submitAction("endTurn", {});
-                  setOpenSheet(null);
                 }}
               >
                 End Turn (skip remaining actions)
@@ -756,13 +744,33 @@ export function GameScreen() {
     setTargeting(null);
     setPlacingLure(false);
   };
+  // Picking on the board — the rail shows a Cancel footer rather than
+  // swallowing the tap somewhere the player can't see it.
+  const boardTargetingActive = Boolean(targeting) || placingLure;
 
   // ---------------------------------------------------------------------------
-  // Compact layout: board edge-to-edge, one truncated prompt line, everything
-  // else behind the dock.
+  // Compact layout: board on one side, a control rail on the other, both
+  // visible at all times. Confirmed by the user: reading the board is part of
+  // every decision, so no panel is ever allowed to cover it.
   // ---------------------------------------------------------------------------
+  const pinnedPanel = startingAbilityPanel ?? mandatoryDiscardPanel ?? choicePanel;
+  const instantResponsePending = myInteraction?.kind === "chooseInstantResponse";
+
+  // Which tab the rail should jump to on its own, by urgency. Only a *change*
+  // in this value moves the tab, so switching to the Log mid-turn sticks
+  // until the game actually needs something else from you.
+  const autoTab: TabKey | null = pinnedPanel
+    ? "interaction"
+    : instantResponsePending
+    ? "hand"
+    : myTurn
+    ? "actions"
+    : null;
+  useEffect(() => {
+    if (compact && autoTab) setActiveTab(autoTab);
+  }, [compact, autoTab]);
+
   if (compact) {
-    const pinnedPanel = startingAbilityPanel ?? mandatoryDiscardPanel ?? choicePanel;
     const unusedAbilities = (me?.abilitiesUsed ?? []).filter((u) => !u).length;
     const extrasCount = (deckPeekPanel ? 1 : 0) + (revealedHandsPanel ? 1 : 0);
 
@@ -819,15 +827,49 @@ export function GameScreen() {
       ),
     };
 
-    const sheets: Record<SheetKey, PanelDef> = {
+    const waitingPanel: PanelDef = {
+      title: myTurn ? "Your turn" : "Waiting",
+      body: (
+        <div className="text-dim small">
+          {myTurn
+            ? "No actions left this turn."
+            : `Waiting for ${view.players.find((p) => p.id === view.activePlayerId)?.name ?? "the other player"}.`}
+        </div>
+      ),
+    };
+
+    const panels: Record<TabKey, PanelDef> = {
+      interaction: pinnedPanel ?? waitingPanel,
+      actions: actionsPanel ?? waitingPanel,
       hand: handPanel,
       abilities: abilitiesPanel,
       effects: effectsPanel,
       log: logPanel,
       more: morePanel,
-      actions: actionsPanel ?? { title: "Your turn", body: <div className="text-dim small">Waiting for your turn.</div> },
     };
-    const activeSheet = openSheet ? sheets[openSheet] : null;
+
+    const tabs: RailTab[] = [
+      // Only present while the game is actually waiting on an answer, and
+      // always first so it lands in the same place every time.
+      ...(pinnedPanel ? [{ key: "interaction" as TabKey, glyph: "⚠", label: pinnedPanel.title, urgent: true, badge: 1 }] : []),
+      { key: "actions", glyph: "▶", label: myTurn ? "Choose your action" : "Turn actions" },
+      {
+        key: "hand",
+        glyph: "🃏",
+        label: "Enchantments in your hand",
+        badge: view.yourHand?.length ?? 0,
+        urgent: instantResponsePending,
+      },
+      { key: "abilities", glyph: "✨", label: domain?.name ?? "Domain abilities", badge: unusedAbilities },
+      { key: "effects", glyph: "⏳", label: "Pending effects", badge: view.responseStack.length, urgent: view.responseStack.length > 0 },
+      { key: "log", glyph: "📜", label: "Game log" },
+      { key: "more", glyph: "☰", label: "More", badge: extrasCount, urgent: extrasCount > 0 },
+    ];
+
+    // An interaction can resolve while its tab is open; fall back rather than
+    // showing an empty panel.
+    const resolvedTab: TabKey = tabs.some((t) => t.key === activeTab) ? activeTab : myTurn ? "actions" : "hand";
+    const panel = panels[resolvedTab];
 
     return (
       <div className="game-compact">
@@ -836,14 +878,10 @@ export function GameScreen() {
           playerColors={colors}
           onViewDomainMat={setViewingMatDomainId}
           showRotateNudge={narrowPortrait}
+          actionsRemaining={myTurn ? view.actionsRemaining : null}
+          boardZoom={boardZoom}
+          onCycleZoom={() => setBoardZoom((z) => (z >= 2.5 ? 1 : z + 0.5))}
         />
-
-        <button className="compact-prompt" onClick={() => setPromptExpanded(true)} title="Tap for the full prompt">
-          <span className="compact-prompt-text">{prompt}</span>
-          <span className="compact-prompt-more" aria-hidden="true">
-            ⓘ
-          </span>
-        </button>
 
         <div className={`compact-board${boardZoom > 1 ? " zoomed" : ""}`} ref={boardScrollRef}>
           <div className="compact-board-inner" style={{ width: `${boardZoom * 100}%`, height: `${boardZoom * 100}%` }}>
@@ -851,96 +889,29 @@ export function GameScreen() {
           </div>
         </div>
 
-        {currentStep?.picks === "obstacle" && currentStep.alt && (
-          <div className="compact-subprompt small">Or: {currentStep.alt.prompt}</div>
-        )}
-
-        <CompactDock
-          buttons={[
-            {
-              key: "hand",
-              glyph: "🃏",
-              label: "Hand",
-              badge: view.yourHand?.length ?? 0,
-              urgent: myInteraction?.kind === "chooseInstantResponse",
-            },
-            { key: "abilities", glyph: "✨", label: "Powers", badge: unusedAbilities },
-            {
-              key: "effects",
-              glyph: "⏳",
-              label: "Effects",
-              badge: view.responseStack.length,
-              urgent: view.responseStack.length > 0,
-            },
-            { key: "log", glyph: "📜", label: "Log" },
-            { key: "more", glyph: "☰", label: "More", badge: extrasCount, urgent: extrasCount > 0 },
-          ]}
-          openSheet={openSheet}
-          onToggleSheet={setOpenSheet}
-          leading={
-            <button
-              className="dock-btn"
-              onClick={() => setBoardZoom((z) => (z >= 2.5 ? 1 : z + 0.5))}
-              title="Zoom the board — the area scrolls when it's larger than the screen"
-            >
-              {/* The factor is the glyph, not the label — labels are hidden
-                  on the shortest screens, and the current zoom is exactly
-                  what you need to see there. */}
-              <span className="dock-glyph dock-glyph-text">{boardZoom}×</span>
-              <span className="dock-label">Zoom</span>
-            </button>
-          }
-          actions={
+        <CompactRail
+          prompt={prompt}
+          onExpandPrompt={() => setPromptExpanded(true)}
+          tabs={tabs}
+          activeTab={resolvedTab}
+          onSelectTab={setActiveTab}
+          title={panel.title}
+          subtitle={resolvedTab === "abilities" && me?.domainId ? DOMAIN_ABBR[me.domainId] : undefined}
+          footer={
             boardTargetingActive ? (
-              <button className="danger dock-action" onClick={cancelTargeting}>
+              <button className="danger" style={{ width: "100%" }} onClick={cancelTargeting}>
                 ✕ Cancel
               </button>
-            ) : myTurn ? (
-              <>
-                {!narrowDock && (
-                  <>
-                    <span className="chip chip-strong dock-count">{view.actionsRemaining ?? 0} act</span>
-                    <button
-                      className="dock-action"
-                      disabled={!placeLureAction?.available}
-                      title={placeLureAction?.reason}
-                      onClick={() => setPlacingLure(true)}
-                    >
-                      Lure
-                    </button>
-                    <button
-                      className="dock-action"
-                      disabled={!drawCardAction?.available}
-                      title={drawCardAction?.reason}
-                      onClick={() => submitAction("drawCard", {})}
-                    >
-                      Draw
-                    </button>
-                  </>
-                )}
-                <button
-                  className={`dock-action${narrowDock ? "" : " secondary"}${openSheet === "actions" ? " active" : ""}`}
-                  title="All turn actions"
-                  onClick={() => setOpenSheet(openSheet === "actions" ? null : "actions")}
-                >
-                  {narrowDock ? `Act ${view.actionsRemaining ?? 0}` : "⋯"}
-                </button>
-              </>
             ) : null
           }
-        />
-
-        {pinnedPanel ? (
-          <Sheet title={pinnedPanel.title} pinned>
-            <div className={pinnedPanel.stacked ? "stack" : ""}>{pinnedPanel.body}</div>
-          </Sheet>
-        ) : (
-          activeSheet && (
-            <Sheet title={activeSheet.title} onClose={() => setOpenSheet(null)}>
-              <div className={activeSheet.stacked ? "stack" : ""}>{activeSheet.body}</div>
-            </Sheet>
-          )
-        )}
+        >
+          <div className={panel.stacked ? "stack" : ""}>{panel.body}</div>
+          {currentStep?.picks === "obstacle" && currentStep.alt && (
+            <div className="small text-dim" style={{ marginTop: 8 }}>
+              Or: {currentStep.alt.prompt}
+            </div>
+          )}
+        </CompactRail>
 
         {promptExpanded && (
           <InfoPopup title="What to do now" onClose={() => setPromptExpanded(false)}>

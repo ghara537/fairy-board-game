@@ -228,9 +228,10 @@ h1, h2, h3 { margin: 0 0 8px 0; }
 
 /* ===========================================================================
    Compact layout — phone-sized viewports, primarily a phone held sideways.
-   The board takes every pixel that isn't the top bar or the dock; everything
-   the wide layout shows at once is behind a dock button or an expandable
-   chip. Gated by the same query as useCompactLayout.ts — keep them in sync.
+   The board and a control rail split the viewport and are both on screen at
+   all times; everything the wide layout stacks down its right rail lives
+   behind one of the rail's tabs, abbreviated to a chip that expands in
+   place. Gated by the same query as useCompactLayout.ts — keep in sync.
    =========================================================================== */
 
 .domain-banner-box { fill: rgba(11, 16, 10, 0.86); stroke-width: 2; }
@@ -291,64 +292,48 @@ dl.kv dd { margin: 0; }
 .info-popup-header { margin-bottom: 8px; gap: 10px; }
 .info-popup-body p:first-child { margin-top: 0; }
 
-/* --- sheets: the dock's disclosure surface --- */
-.sheet-backdrop { position: fixed; inset: 0; bottom: var(--dock-h); background: rgba(5, 8, 4, 0.45); z-index: 140; }
-.sheet {
-  /* Stops short of the bottom so the dock stays visible and tappable — you
-     can jump straight from Hand to Log without closing anything, and a
-     pinned interaction never hides the Cancel button. */
-  position: fixed; left: 0; right: 0; bottom: var(--dock-h); z-index: 150;
-  display: flex; flex-direction: column;
-  max-height: min(70vh, 400px);
-  background: var(--panel);
-  border-top: 1px solid var(--accent);
-  border-radius: 14px 14px 0 0;
-  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.55);
-}
-.sheet-pinned { border-top-color: var(--accent-2); max-height: min(58vh, 330px); }
-.sheet-header {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  padding: 8px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0;
-}
-.sheet-titles { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
-.sheet-close { padding: 2px 9px; }
-.sheet-body { padding: 10px 12px 12px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-/* The log panel is `column-reverse` with a pre-reversed list, so in its own
-   fixed-height box it scrolls to the newest entry. Uncapped inside a sheet
-   the sheet body scrolls instead, and that lands on the OLDEST entry — so
-   drop the reverse and let newest sit at the top, where the sheet opens. */
-.sheet-body .log-panel { max-height: none; flex-direction: column; }
-.sheet-body details { border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
-.sheet-body details > summary { padding: 7px 10px; cursor: pointer; font-size: 0.85em; font-weight: 600; }
-.sheet-body .details-body { padding: 0 10px 10px; }
-.sheet-body .card-panel { padding: 10px; }
-
-/* --- the compact screen itself --- */
+/* --- the compact screen: board and control rail, side by side --- */
 .game-compact {
-  --dock-h: calc(52px + env(safe-area-inset-bottom, 0px));
+  /* One source of truth for the rail's size: the grid track, and the bounds
+     any popup is confined to, so nothing can end up over the board. */
+  --rail-w: clamp(250px, 38%, 360px);
+  --rail-h: clamp(190px, 40%, 330px);
   position: fixed; inset: 0;
-  display: flex; flex-direction: column;
-  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--rail-w);
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas: "top top" "board rail";
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
   overflow: hidden;
 }
+/* Upright: the rail moves below the board and takes a capped slice of the
+   height, so the board always keeps the rest of it and is never covered. */
+@media (orientation: portrait) {
+  .game-compact {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) var(--rail-h);
+    grid-template-areas: "top" "board" "rail";
+  }
+}
+
 .compact-topbar {
+  grid-area: top;
   display: flex; align-items: center; gap: 6px;
-  padding: 5px 8px; flex-shrink: 0;
+  padding: 5px 8px;
   border-bottom: 1px solid var(--border); background: var(--panel);
   overflow-x: auto; scrollbar-width: none;
 }
 .compact-topbar::-webkit-scrollbar { display: none; }
-.compact-prompt {
-  display: flex; align-items: center; gap: 8px; width: 100%; flex-shrink: 0;
-  background: linear-gradient(90deg, #2c5a45, #1f2e3d);
-  border: none; border-bottom: 1px solid var(--accent); border-radius: 0;
-  color: var(--text); text-align: left;
-  padding: 5px 10px; font-size: 0.82em; font-weight: 600;
+/* Narrow enough that the chips can't fit on one line: wrap onto a second
+   row rather than scroll. Scores and whose turn it is are status you should
+   never have to swipe for, and the bar is an `auto` grid track, so the
+   second row costs the board ~26px and nothing is hidden. */
+@media (max-width: 620px) {
+  .compact-topbar { flex-wrap: wrap; overflow-x: visible; row-gap: 4px; }
 }
-.compact-prompt-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.compact-prompt-more { opacity: 0.8; flex-shrink: 0; }
-.compact-subprompt { flex-shrink: 0; padding: 3px 10px; color: var(--text-dim); }
-.compact-board { flex: 1; min-height: 0; display: flex; padding: 2px; }
+.chip-zoom { min-width: 40px; justify-content: center; }
+
+.compact-board { grid-area: board; min-width: 0; min-height: 0; display: flex; padding: 2px; }
 .compact-board.zoomed { overflow: auto; -webkit-overflow-scrolling: touch; }
 /* `margin: auto` centers the board when it fits and still lets an oversized
    one scroll from its true top-left, which flex centering would clip. */
@@ -365,44 +350,78 @@ dl.kv dd { margin: 0; }
 .game-compact .obstacle-icon { font-size: 27px; }
 .piece-hit { fill: transparent; }
 
-.compact-dock {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  flex-shrink: 0; padding: 4px 8px calc(4px + env(safe-area-inset-bottom, 0px));
-  border-top: 1px solid var(--border); background: var(--panel);
+.compact-rail {
+  grid-area: rail;
+  display: flex; flex-direction: column; min-width: 0; min-height: 0;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+}
+@media (orientation: portrait) {
+  .compact-rail { border-left: none; border-top: 1px solid var(--border); }
+}
+
+.rail-prompt {
+  display: flex; align-items: flex-start; gap: 8px; text-align: left; flex-shrink: 0;
+  background: linear-gradient(90deg, #2c5a45, #1f2e3d);
+  border: none; border-radius: 0; color: var(--text);
+  padding: 6px 10px; font-size: 0.8em; font-weight: 600; line-height: 1.3;
+}
+/* Clamped rather than truncated to one line: the rail is tall enough for a
+   few lines, and the full text is a tap away on the ⓘ. */
+.rail-prompt-text {
+  flex: 1; min-width: 0;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
+}
+.rail-prompt-more { opacity: 0.8; flex-shrink: 0; }
+
+.rail-tabs {
+  display: flex; gap: 4px; flex-shrink: 0;
+  padding: 5px 6px; border-bottom: 1px solid var(--border);
   overflow-x: auto; scrollbar-width: none;
 }
-.compact-dock::-webkit-scrollbar { display: none; }
-.dock-group { display: flex; align-items: center; gap: 5px; }
-.dock-actions { margin-left: auto; }
-.dock-btn {
-  position: relative; display: flex; flex-direction: column; align-items: center;
-  gap: 1px; min-width: 46px;
+.rail-tabs::-webkit-scrollbar { display: none; }
+.rail-tab {
+  position: relative; flex: 1 1 0; min-width: 34px;
   background: var(--panel-2); color: var(--text);
   border: 1px solid var(--border); border-radius: 8px;
-  padding: 3px 7px; font-weight: 600;
+  padding: 5px 4px; font-size: 15px; line-height: 1.15;
 }
-.dock-btn.active { border-color: var(--accent); background: #22382c; }
-.dock-glyph { font-size: 15px; line-height: 1.1; }
-.dock-label { font-size: 0.62rem; letter-spacing: 0.02em; text-transform: uppercase; opacity: 0.85; }
-.dock-badge {
-  position: absolute; top: -5px; right: -5px; min-width: 16px;
+.rail-tab.active { border-color: var(--accent); background: #22382c; }
+.rail-badge {
+  position: absolute; top: -5px; right: -4px; min-width: 15px;
   border-radius: 999px; background: var(--panel); border: 1px solid var(--border);
-  font-size: 0.6rem; line-height: 14px; padding: 0 3px; font-weight: 700;
+  font-size: 0.58rem; line-height: 13px; padding: 0 3px; font-weight: 700;
 }
-.dock-badge.urgent { background: var(--accent-2); border-color: var(--accent-2); color: #241a0d; }
-.dock-action { padding: 7px 12px; font-size: 0.82em; border-radius: 8px; }
-.dock-action.secondary.active { border-color: var(--accent); }
-.dock-count { flex-shrink: 0; }
+.rail-badge.urgent { background: var(--accent-2); border-color: var(--accent-2); color: #241a0d; }
 
-/* A phone sideways is ~390px tall: trim the chrome further so the board keeps
-   the majority of it. */
+.rail-header {
+  display: flex; align-items: baseline; gap: 6px; flex-shrink: 0;
+  padding: 6px 10px 4px; border-bottom: 1px solid var(--border);
+}
+.rail-header strong { font-size: 0.9em; }
+.rail-body { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 8px 10px 10px; }
+.rail-body .log-panel { max-height: none; flex-direction: column; }
+.rail-body details { border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
+.rail-body details > summary { padding: 7px 10px; cursor: pointer; font-size: 0.85em; font-weight: 600; }
+.rail-body .details-body { padding: 0 10px 10px; }
+.rail-body .card-panel { padding: 10px; }
+.rail-footer { flex-shrink: 0; padding: 6px 8px; border-top: 1px solid var(--border); }
+
+/* Popups stay inside the rail's footprint — an abbreviation's expansion is
+   still a panel, and panels don't cover the board. */
+.game-compact .info-popup-overlay { left: auto; width: var(--rail-w); padding: 10px; }
+@media (orientation: portrait) {
+  .game-compact .info-popup-overlay { left: 0; width: auto; top: auto; height: var(--rail-h); }
+}
+
+/* A phone sideways is ~390px tall: trim the chrome so the rail's own panel
+   keeps as much of that as possible. */
 @media (max-height: 460px) {
-  .game-compact { --dock-h: calc(40px + env(safe-area-inset-bottom, 0px)); }
-  .dock-label { display: none; }
-  .dock-btn { min-width: 38px; padding: 5px 8px; }
   .compact-topbar { padding: 3px 8px; }
-  .compact-prompt { padding: 3px 10px; }
-  .sheet { max-height: 72vh; }
+  .rail-prompt { padding: 4px 10px; }
+  .rail-prompt-text { -webkit-line-clamp: 2; }
+  .rail-header { padding: 4px 10px 3px; }
+  .rail-body { padding: 6px 9px 8px; }
 }
 
 /* The compact game screen is `position: fixed` and draws its own chrome, so
@@ -413,18 +432,9 @@ dl.kv dd { margin: 0; }
   z-index: 400; font-size: 0.8em; padding: 7px 10px;
 }
 @media (max-width: 900px), (max-height: 560px) {
-  /* Clear of the dock, and above the sheets — a dropped connection has to be
-     readable even with a panel open. */
-  .toast-stack { bottom: 62px; left: 8px; right: 8px; z-index: 400; }
+  /* Bottom-left, which is board in landscape and board in portrait too —
+     the one corner no control sits in. A dropped connection has to be
+     readable whatever panel is open. */
+  .toast-stack { bottom: 10px; left: 8px; right: auto; max-width: 60vw; z-index: 400; }
   .toast { max-width: none; }
-}
-.dock-glyph-text { font-size: 0.85rem; font-weight: 700; letter-spacing: -0.02em; }
-
-/* Narrow screens: the dock's six panel buttons plus an action button are all
-   that fit across, so labels go and the buttons tighten up. */
-@media (max-width: 600px) {
-  .dock-label { display: none; }
-  .dock-btn { min-width: 36px; padding: 5px 6px; }
-  .dock-group { gap: 4px; }
-  .dock-action { padding: 7px 10px; }
 }

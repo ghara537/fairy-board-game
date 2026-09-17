@@ -13,11 +13,18 @@ export function CompactTopBar({
   playerColors,
   onViewDomainMat,
   showRotateNudge,
+  actionsRemaining,
+  boardZoom,
+  onCycleZoom,
 }: {
   view: PersonalizedGameView;
   playerColors: Record<PlayerId, string>;
   onViewDomainMat: (domainId: DomainId) => void;
   showRotateNudge: boolean;
+  /** Actions left this turn, or null when it isn't your turn. */
+  actionsRemaining: number | null;
+  boardZoom: number;
+  onCycleZoom: () => void;
 }) {
   const [popup, setPopup] = useState<"status" | "spawn" | "rotate" | { player: PlayerId } | null>(null);
   const phase = PHASE_LABELS[view.phase];
@@ -55,6 +62,22 @@ export function CompactTopBar({
 
       <button className="chip" onClick={() => setPopup("spawn")} title="Which Portal spawn set arrives next">
         ⧉{view.board?.spawnIndicator ?? "—"}
+      </button>
+
+      {actionsRemaining !== null && (
+        <span className="chip chip-strong" title="Actions left this turn">
+          {actionsRemaining} act
+        </span>
+      )}
+
+      {/* Zoom lives up here with the other board-wide status: it belongs to
+          the board, not to any one control panel. */}
+      <button
+        className="chip chip-zoom"
+        onClick={onCycleZoom}
+        title="Zoom the board — the board area scrolls when it's larger than its pane"
+      >
+        {boardZoom}×
       </button>
 
       {showRotateNudge && (
